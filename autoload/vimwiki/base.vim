@@ -174,6 +174,7 @@ function! vimwiki#base#resolve_link(link_text, ...)
   if link_infos.scheme =~# '\mwiki\d\+'
     let link_infos.index = eval(matchstr(link_infos.scheme, '\D\+\zs\d\+\ze'))
     if link_infos.index < 0 || link_infos.index >= vimwiki#vars#number_of_wikis()
+      let link_infos.index = -1
       let link_infos.filename = ''
       return link_infos
     endif
@@ -219,22 +220,32 @@ endfunction
 function! vimwiki#base#system_open_link(url)
   " handlers
   function! s:win32_handler(url)
-    "http://vim.wikia.com/wiki/Opening_current_Vim_file_in_your_Windows_browser
-    "disable 'shellslash', otherwise the url will be enclosed in single quotes,
-    "which is problematic
-    "see https://github.com/vimwiki/vimwiki/issues/54#issuecomment-48011289
-    if exists('+shellslash')
-      let old_ssl = &shellslash
-      set noshellslash
-      let url = shellescape(a:url, 1)
-      let &shellslash = old_ssl
+    "Disable shellslash for cmd and command.com, but enable for all other shells
+    "See Issue #560
+    if (&shell =~? "cmd") || (&shell =~? "command.com")
+
+      if exists('+shellslash')
+        let old_ssl = &shellslash
+        set noshellslash
+        let url = shellescape(a:url, 1)
+        let &shellslash = old_ssl
+      else
+        let url = shellescape(a:url, 1)
+      endif
+      execute 'silent ! start "Title" /B ' . url
+
     else
-      let url = shellescape(a:url, 1)
-    endif
-    if &l:shell ==? "powershell"
-      execute 'silent ! start ' . a:url
-    else
-      execute 'silent ! start "Title" /B ' . a:url
+
+      if exists('+shellslash')
+        let old_ssl = &shellslash
+        set shellslash
+        let url = shellescape(a:url, 1)
+        let &shellslash = old_ssl
+      else
+        let url = shellescape(a:url, 1)
+      endif
+      execute 'silent ! start ' . url
+
     endif
   endfunction
   function! s:macunix_handler(url)
@@ -268,7 +279,11 @@ function! vimwiki#base#open_link(cmd, link, ...)
   endif
 
   if link_infos.filename == ''
-    echomsg 'Vimwiki Error: Unable to resolve link!'
+    if link_infos.index == -1
+      echomsg 'Vimwiki Error: No registered wiki ''' . link_infos.scheme . '''.'
+    else
+      echomsg 'Vimwiki Error: Unable to resolve link!'
+    endif
     return
   endif
 
@@ -728,8 +743,11 @@ function! vimwiki#base#edit_file(command, filename, anchor, ...)
       try
         execute a:command fname
       catch /E37:/
-        echomsg 'Vimwiki: The current file is modified. Hint: Take a look at'
+        echomsg 'Vimwiki: Can''t leave the current buffer, because it is modified. Hint: Take a look at'
               \ ''':h g:vimwiki_autowriteall'' to see how to save automatically.'
+        return
+      catch /E325:/
+        echom 'Vimwiki: Vim couldn''t open the file, probably because a swapfile already exists. See :h E325.'
         return
       endtry
     endif
@@ -849,16 +867,17 @@ function! s:update_wiki_link(fname, old, new)
 endfunction
 
 
-function! s:update_wiki_links_dir(dir, old_fname, new_fname)
+function! s:update_wiki_links_dir(wiki_nr, dir, old_fname, new_fname)
   let old_fname = substitute(a:old_fname, '[/\\]', '[/\\\\]', 'g')
   let new_fname = a:new_fname
 
   let old_fname_r = vimwiki#base#apply_template(
-        \ vimwiki#vars#get_syntaxlocal('WikiLinkMatchUrlTemplate'), old_fname, '', '')
+        \ vimwiki#vars#get_syntaxlocal('WikiLinkMatchUrlTemplate',
+           \ vimwiki#vars#get_wikilocal('syntax', a:wiki_nr)), old_fname, '', '')
 
-  let files = split(glob(vimwiki#vars#get_wikilocal('path').a:dir.'*'.
-        \ vimwiki#vars#get_wikilocal('ext')), '\n')
-  for fname in files
+  let files = split(glob(vimwiki#vars#get_wikilocal('path', a:wiki_nr).a:dir.'*'.
+        \ vimwiki#vars#get_wikilocal('ext', a:wiki_nr)), '\n')
+  for fname in l:files
     call s:update_wiki_link(fname, old_fname_r, new_fname)
   endfor
 endfunction
@@ -872,7 +891,7 @@ function! s:tail_name(fname)
 endfunction
 
 
-function! s:update_wiki_links(old_fname, new_fname)
+function! s:update_wiki_links(wiki_nr, old_fname, new_fname)
   let old_fname = a:old_fname
   let new_fname = a:new_fname
 
@@ -898,7 +917,7 @@ function! s:update_wiki_links(old_fname, new_fname)
   while idx < len(dirs_keys)
     let dir = dirs_keys[idx]
     let new_dir = dirs_vals[idx]
-    call s:update_wiki_links_dir(dir, new_dir.old_fname, new_dir.new_fname)
+    call s:update_wiki_links_dir(a:wiki_nr, dir, new_dir.old_fname, new_dir.new_fname)
     let idx = idx + 1
   endwhile
 endfunction
@@ -1273,12 +1292,10 @@ function! vimwiki#base#rename_link()
   let new_link = input('Enter new name: ')
 
   if new_link =~# '[/\\]'
-    " It is actually doable but I do not have free time to do it.
     echomsg 'Vimwiki Error: Cannot rename to a filename with path!'
     return
   endif
 
-  " check new_fname - it should be 'good', not empty
   if substitute(new_link, '\s', '', 'g') == ''
     echomsg 'Vimwiki Error: Cannot rename to an empty filename!'
     return
@@ -1290,6 +1307,7 @@ function! vimwiki#base#rename_link()
   endif
 
   let new_link = subdir.new_link
+  let wiki_nr = vimwiki#vars#get_bufferlocal("wiki_nr")
   let new_fname = vimwiki#vars#get_wikilocal('path') . new_link . vimwiki#vars#get_wikilocal('ext')
 
   " do not rename if file with such name exists
@@ -1333,7 +1351,7 @@ function! vimwiki#base#rename_link()
   setlocal nomore
 
   " update links
-  call s:update_wiki_links(s:tail_name(old_fname), new_link)
+  call s:update_wiki_links(wiki_nr, s:tail_name(old_fname), new_link)
 
   " restore wiki buffers
   for bitem in blist
@@ -1861,7 +1879,8 @@ endfunction
 
 function! s:clean_url(url)
   " remove protocol and tld
-  let url = substitute(a:url, '^\a\+://', '', '')
+  let url = substitute(a:url, '^\a\+\d*:', '', '')
+  let url = substitute(url, '^//', '', '')
   let url = substitute(url, '^\([^/]\+\).\a\{2,4}/', '\1/', '')
   let url = split(url, '/\|=\|-\|&\|?\|\.')
   let url = filter(url, 'v:val !=# ""')
