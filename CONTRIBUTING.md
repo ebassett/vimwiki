@@ -10,14 +10,23 @@ If you want to provide a pull request on GitHub, please start from the `dev` bra
 `master` branch. (Caution, GitHub shows `master` as the default branch from which to start a PR.)
 
 
-# More info for (aspiring) core developers
+# More info and advice for (aspiring) core developers
+- Before implementing a non-trivial feature, think twice what it means for the user. We should
+  always try to keep backward compatiblility. If you are not sure, discuss it on GitHub.
+- Also, when thinking about adding a new feature, it should be something which fits into the
+  overall design of Vimwiki and which a significant portion of the users may like. Keep in mind
+  that everybody has their own way to use Vimwiki.
+- Keep the coding style consistent.
+- Test your changes. Keep in mind that Vim has a ton of options and the users tons of different
+  setups. Take a little time to think about under which circumstances your changes could break.
+
 ## Git branching model
 - there are two branches with eternal lifetime:
     - `dev`: This is where the main development happens. Tasks which are done in one or only a few
       commits go here directly. Always try to keep this branch in a working state, that is, if the
       task you work on requires multiple commits, make sure intermediate commits don't make Vimwiki
       unusable (or at least push these commits at one go).
-    - `master`: This branches is for released states only. Whenever a reasonable set of changes has
+    - `master`: This branch is for released states only. Whenever a reasonable set of changes has
       piled up in the `dev` branch, a [release is done](#Preparing a release). After a release,
       `dev` has been merged into `master` and `master` got exactly one additional commit in which
       the version number in `plugin/vimwiki.vim` is updated. Apart from these commits and the merge

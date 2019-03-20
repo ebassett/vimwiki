@@ -344,7 +344,27 @@ endfunction
 
 
 function! s:tag_code(value)
-  return '<code>'.s:safe_html_preformatted(s:mid(a:value, 1)).'</code>'
+  let l:retstr = '<code'
+
+  let l:str = s:mid(a:value, 1)
+  let l:match = match(l:str, '^#[a-fA-F0-9]\{6\}$')
+
+  if l:match != -1
+    let l:r = eval("0x".l:str[1:2])
+    let l:g = eval("0x".l:str[3:4])
+    let l:b = eval("0x".l:str[5:6])
+
+    let l:fg_color =
+          \ (((0.299 * r + 0.587 * g + 0.114 * b) / 0xFF) > 0.5)
+          \ ? "black" : "white"
+
+    let l:retstr .=
+          \ " style='background-color:" . l:str .
+          \ ";color:" . l:fg_color . ";'"
+  endif
+
+  let l:retstr .= '>'.s:safe_html_preformatted(l:str).'</code>'
+  return l:retstr
 endfunction
 
 
@@ -366,7 +386,7 @@ endfunction
 
 function! s:linkify_link(src, descr)
   let src_str = ' href="'.s:escape_html_attribute(a:src).'"'
-  let descr = substitute(a:descr,'^\s*\(.*\)\s*$','\1','')
+  let descr = vimwiki#u#trim(a:descr)
   let descr = (descr == "" ? a:src : descr)
   let descr_str = (descr =~# vimwiki#vars#get_global('rxWikiIncl')
         \ ? s:tag_wikiincl(descr)
@@ -438,7 +458,8 @@ function! s:tag_wikilink(value)
   let str = a:value
   let url = matchstr(str, vimwiki#vars#get_syntaxlocal('rxWikiLinkMatchUrl'))
   let descr = matchstr(str, vimwiki#vars#get_syntaxlocal('rxWikiLinkMatchDescr'))
-  let descr = (substitute(descr,'^\s*\(.*\)\s*$','\1','') != '' ? descr : url)
+  let descr = vimwiki#u#trim(descr)
+  let descr = (descr != '' ? descr : url)
 
   let line = VimwikiLinkConverter(url, s:current_wiki_file, s:current_html_file)
   if line == ''
@@ -836,7 +857,7 @@ function! s:process_tag_math(line, math)
     " environment properly
     let s:current_math_env = matchstr(class, '^%\zs\S\+\ze%')
     if s:current_math_env != ""
-      call add(lines, substitute(class, '^%\(\S\+\)%','\\begin{\1}', ''))
+      call add(lines, substitute(class, '^%\(\S\+\)%', '\\begin{\1}', ''))
     elseif class != ""
       call add(lines, "\\\[".class)
     else
@@ -1071,11 +1092,13 @@ function! s:process_tag_h(line, id)
         let h_text = num.' '.h_text
       endif
       let h_complete_id = s:escape_html_attribute(h_complete_id)
-      let h_part = '<div id="'.h_complete_id.'"><h'.h_level.' id="'.h_id.'"'
+      let h_part  = '<div id="'.h_complete_id.'">'
+      let h_part .= '<h'.h_level.' id="'.h_id.'" class="header">'
+      let h_part .= '<a href="#'.h_complete_id.'"'
 
     else
 
-      let h_part = '<div id="'.h_id.'" class="toc"><h1 id="'.h_id.'"'
+      let h_part = '<div id="'.h_id.'" class="toc"><h'.h_level.' id="'.h_id.'"'
 
     endif
 
@@ -1087,7 +1110,7 @@ function! s:process_tag_h(line, id)
 
     let h_text = s:process_inline_tags(h_text, a:id)
 
-    let line = h_part.h_text.'</h'.h_level.'></div>'
+    let line = h_part.h_text.'</a></h'.h_level.'></div>'
 
     let processed = 1
   endif
@@ -1526,6 +1549,7 @@ function! s:convert_file(path_html, wikifile)
 
     let title = s:process_title(placeholders, fnamemodify(a:wikifile, ":t:r"))
     let date = s:process_date(placeholders, strftime('%Y-%m-%d'))
+    let wiki_path = strpart(s:current_wiki_file, strlen(vimwiki#vars#get_wikilocal('path')))
 
     let html_lines = s:get_html_template(template_name)
 
@@ -1534,6 +1558,7 @@ function! s:convert_file(path_html, wikifile)
     call map(html_lines, 'substitute(v:val, "%date%", "'. date .'", "g")')
     call map(html_lines, 'substitute(v:val, "%root_path%", "'.
           \ s:root_path(vimwiki#vars#get_bufferlocal('subdir')) .'", "g")')
+    call map(html_lines, 'substitute(v:val, "%wiki_path%", "'. wiki_path .'", "g")')
 
     let css_name = expand(vimwiki#vars#get_wikilocal('css_name'))
     let css_name = substitute(css_name, '\', '/', 'g')

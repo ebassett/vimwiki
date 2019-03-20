@@ -310,8 +310,8 @@ command! -buffer VimwikiListToggle call vimwiki#lst#toggle_list_item()
 
 " table commands
 command! -buffer -nargs=* VimwikiTable call vimwiki#tbl#create(<f-args>)
-command! -buffer VimwikiTableAlignQ call vimwiki#tbl#align_or_cmd('gqq')
-command! -buffer VimwikiTableAlignW call vimwiki#tbl#align_or_cmd('gww')
+command! -buffer -nargs=? VimwikiTableAlignQ call vimwiki#tbl#align_or_cmd('gqq', <f-args>)
+command! -buffer -nargs=? VimwikiTableAlignW call vimwiki#tbl#align_or_cmd('gww', <f-args>)
 command! -buffer VimwikiTableMoveColumnLeft call vimwiki#tbl#move_column_left()
 command! -buffer VimwikiTableMoveColumnRight call vimwiki#tbl#move_column_right()
 
@@ -589,6 +589,8 @@ endif
 
 nnoremap <buffer> gqq :VimwikiTableAlignQ<CR>
 nnoremap <buffer> gww :VimwikiTableAlignW<CR>
+nnoremap <buffer> gq1 :VimwikiTableAlignQ 2<CR>
+nnoremap <buffer> gw1 :VimwikiTableAlignW 2<CR>
 if !hasmapto('<Plug>VimwikiTableMoveColumnLeft')
   nmap <silent><buffer> <A-Left> <Plug>VimwikiTableMoveColumnLeft
 endif
@@ -638,13 +640,14 @@ vnoremap <silent><buffer> il :<C-U>call vimwiki#lst#TO_list_item(1, 1)<CR>
 if !hasmapto('<Plug>VimwikiAddHeaderLevel')
   nmap <silent><buffer> = <Plug>VimwikiAddHeaderLevel
 endif
-nnoremap <silent><buffer> <Plug>VimwikiAddHeaderLevel :<C-U>call vimwiki#base#AddHeaderLevel()<CR>
+nnoremap <silent><buffer> <Plug>VimwikiAddHeaderLevel :
+      \<C-U>call vimwiki#base#AddHeaderLevel(v:count)<CR>
 
 if !hasmapto('<Plug>VimwikiRemoveHeaderLevel')
   nmap <silent><buffer> - <Plug>VimwikiRemoveHeaderLevel
 endif
 nnoremap <silent><buffer> <Plug>VimwikiRemoveHeaderLevel :
-      \<C-U>call vimwiki#base#RemoveHeaderLevel()<CR>
+      \<C-U>call vimwiki#base#RemoveHeaderLevel(v:count)<CR>
 
 if !hasmapto('<Plug>VimwikiGoToParentHeader')
   nmap <silent><buffer> ]u <Plug>VimwikiGoToParentHeader
